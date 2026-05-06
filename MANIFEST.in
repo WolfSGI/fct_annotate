@@ -1,0 +1,7 @@
+graft src
+
+include *.rst
+include *.txt
+include pyproject.toml
+
+global-exclude __pycache__ *.py[cod] *~
