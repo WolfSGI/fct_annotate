@@ -1,13 +1,12 @@
 import typing as t
-from collections.abc import MutableMapping
+from dataclasses import dataclass
 from inspect import unwrap, getmembers, isroutine
+from dataclasses import asdict
 
 
-class annotation:
-    name: t.ClassVar[str] = "__annotations__"
-
-    def __init__(self, **values):
-        self.annotation = values
+@dataclass
+class Annotation:
+    __key__: t.ClassVar[str] = '__annotations__'
 
     @staticmethod
     def discriminator(component) -> Exception | None:
@@ -16,6 +15,9 @@ class annotation:
         if component.__name__.startswith("_"):
             return NameError(f"{component!r} has a private name.")
         return None
+
+    def dump(self, component):
+        return asdict(self)
 
     @classmethod
     def predicate(cls, component):
@@ -27,7 +29,7 @@ class annotation:
         canonical = unwrap(func)
         if error := self.discriminator(canonical):
             raise error
-        setattr(canonical, self.name, self.annotation)
+        setattr(canonical, self.__key__, self.dump(func))
         return func
 
     @classmethod
@@ -35,27 +37,16 @@ class annotation:
         members = getmembers(obj_or_module, predicate=cls.predicate)
         for name, func in members:
             canonical = unwrap(func)
-            if annotations := getattr(canonical, cls.name, False):
-                yield annotations, func
+            if (val := getattr(canonical, cls.__key__, False)) is not False:
+                yield val, func
 
 
-class annotation_mapping(annotation):
-    container: t.ClassVar[type[MutableMapping]] = dict
-
-    def __init__(self, key: str, **values):
-        self.key = key
-        super().__init__(**values)
-
-    def __call__(self, func):
-        canonical = unwrap(func)
-        if error := self.discriminator(canonical):
-            raise error
-        if (annotations := getattr(canonical, self.name, None)) is not None:
-            if not isinstance(annotations, self.container):
-                raise TypeError("Unknown type of annotations container.")
-        else:
-            annotations = self.container()
-            setattr(canonical, self.name, annotations)
-
-        annotations = self.annotation
-        return func
+def annotation(key: str):
+    def annotation_decorator(cls):
+        dc = dataclass(kw_only=True)(cls)
+        return type(
+            f"Annotation{cls.__name__.title()}",
+            (dc, Annotation),
+            {"__key__": f"__annotation_{key}__"}
+        )
+    return annotation_decorator
